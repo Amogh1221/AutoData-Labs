@@ -1,0 +1,19 @@
+# AutoData Labs - Core Dependencies
+
+# Web & API
+fastapi>=0.110.0
+uvicorn>=0.29.0
+sse-starlette>=2.0.0
+
+# LLM & AI
+langgraph>=0.0.30
+ollama>=0.1.7
+
+# Crawling & Scraping
+beautifulsoup4>=4.12.3
+ddgs>=6.0.0
+requests>=2.31.0
+
+# Data & Config
+pydantic>=2.6.0
+python-dotenv>=1.0.1

@@ -1,0 +1,128 @@
+:root {
+  --color-ink: #0F1417;
+  --color-panel: #171D22;
+  --color-panel-raised: #1E262C;
+  --color-line: #2A333A;
+  --color-grid: #1A2024;
+  --color-text-primary: #ECEDE7;
+  --color-text-secondary: #9CA3A8;
+  --color-text-muted: #62696F;
+
+  --color-status-queued: #3A434B;
+  --color-status-researching: #6FA8C9;
+  --color-status-verifying: #8B7FC7;
+  --color-status-resolved: #5FB89C;
+  --color-status-flagged: #D6853D;
+  --color-status-failed: #C0453D;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Public Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Graph paper background */
+.graph-bg {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+  position: relative;
+}
+
+.graph-bg::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 0%, rgba(95, 184, 156, 0.12) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-primary { color: var(--color-text-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted { color: var(--color-text-muted); }
+
+.card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  padding: 1.5rem;
+  border-radius: 4px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+
+.status-queued { background: var(--color-status-queued); color: #FFF; }
+.status-researching { background: var(--color-status-researching); color: #FFF; }
+.status-verifying { background: var(--color-status-verifying); color: #FFF; }
+.status-resolved { background: var(--color-status-resolved); color: #111; }
+.status-flagged { background: var(--color-status-flagged); color: #FFF; }
+.status-failed { background: var(--color-status-failed); color: #FFF; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Micro-interactions */
+input {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+input:focus {
+  border-color: var(--color-status-resolved) !important;
+  box-shadow: 0 0 0 1px var(--color-status-resolved) !important;
+}
+
+button {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+}
+
+button:not(:disabled):active {
+  transform: translateY(0px);
+}
