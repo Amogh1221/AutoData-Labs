@@ -1,6 +1,6 @@
 import json
-import ollama
 from typing import Dict, Any
+from core.llm import chat
 from core.interfaces import IExtractor
 
 class OllamaExtractor(IExtractor):
@@ -21,7 +21,7 @@ class OllamaExtractor(IExtractor):
         """
         
         try:
-            response = ollama.chat(model=self.model_name, messages=[
+            response = chat(model=self.model_name, messages=[
                 {'role': 'system', 'content': 'You are a precise data extraction system. You only output valid JSON without any markdown formatting like ```json.'},
                 {'role': 'user', 'content': prompt}
             ])

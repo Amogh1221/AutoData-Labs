@@ -17,3 +17,6 @@ requests>=2.31.0
 # Data & Config
 pydantic>=2.6.0
 python-dotenv>=1.0.1
+
+# Testing
+pytest>=7.0.0

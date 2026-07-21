@@ -1,9 +1,128 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Activity, StopCircle, PauseCircle, PlayCircle, Database, CheckCircle, Table, BarChart2, Zap, Download } from 'lucide-react';
+import { Activity, StopCircle, PauseCircle, PlayCircle, Database, CheckCircle, Table, BarChart2, Zap, Download, Key, AlertTriangle, X } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
+
+// ---------------------------------------------------------------------------
+// ApiKeyModal
+// ---------------------------------------------------------------------------
+function ApiKeyModal({ runId, onKeySubmitted, onDismiss }) {
+  const [keyInput, setKeyInput] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) { setError('Please enter a valid API key.'); return; }
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('http://localhost:8000/api/set_api_key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: runId, api_key: trimmed }),
+      });
+      const data = await res.json();
+      if (data.error) { setError(data.error); setSubmitting(false); return; }
+      onKeySubmitted();
+    } catch (e) {
+      setError('Failed to send key — is the server running?');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        background: 'var(--color-panel)',
+        border: '1px solid rgba(239,68,68,0.4)',
+        borderRadius: '12px',
+        padding: '2rem',
+        maxWidth: '480px', width: '90%',
+        boxShadow: '0 0 60px rgba(239,68,68,0.15), 0 24px 48px rgba(0,0,0,0.5)',
+        animation: 'fadeInUp 0.3s ease',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: 'rgba(239,68,68,0.15)',
+            border: '1px solid rgba(239,68,68,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={20} color="#ef4444" />
+          </div>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text)' }}>API Limit Reached</h3>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>Hugging Face quota exhausted</p>
+          </div>
+          <button onClick={onDismiss} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '4px' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+          The owner's Hugging Face API key has been exhausted. You can provide your own key to
+          continue — it will <strong style={{ color: 'var(--color-text)' }}>only be used for this session</strong> and is
+          never stored.
+        </p>
+
+        {/* Input */}
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginBottom: '0.4rem', fontFamily: 'var(--font-mono)' }}>
+            <Key size={12} style={{ marginRight: '0.35rem', verticalAlign: 'middle' }} />
+            Your Hugging Face API Key
+          </label>
+          <input
+            type="password"
+            value={keyInput}
+            onChange={e => { setKeyInput(e.target.value); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+            placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxx"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              background: 'var(--color-ink)',
+              border: `1px solid ${error ? '#ef4444' : 'var(--color-line)'}`,
+              borderRadius: '6px', padding: '0.65rem 0.85rem',
+              color: 'var(--color-text)', fontSize: '0.9rem',
+              fontFamily: 'var(--font-mono)', outline: 'none',
+            }}
+          />
+          {error && <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: '#ef4444', fontFamily: 'var(--font-mono)' }}>{error}</p>}
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button onClick={onDismiss} style={{
+            background: 'transparent', border: '1px solid var(--color-line)',
+            color: 'var(--color-text-secondary)', padding: '0.6rem 1.1rem',
+            borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem',
+          }}>
+            Export what I have
+          </button>
+          <button onClick={handleSubmit} disabled={submitting} style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            border: 'none', color: '#fff',
+            padding: '0.6rem 1.25rem', borderRadius: '6px',
+            cursor: submitting ? 'wait' : 'pointer',
+            fontWeight: 600, fontSize: '0.875rem',
+            opacity: submitting ? 0.7 : 1,
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+          }}>
+            <Key size={14} />{submitting ? 'Connecting...' : 'Continue Extraction'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const location = useLocation();
@@ -17,8 +136,10 @@ export default function Dashboard() {
   const [isRunning, setIsRunning] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
-  const [activeTab, setActiveTab] = useState('analytics'); // 'analytics' | 'data'
+  const [activeTab, setActiveTab] = useState('analytics');
   const [agentStatus, setAgentStatus] = useState("Initializing Pipeline...");
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
+  const [isPartialExport, setIsPartialExport] = useState(false);
 
   // Stream Logs & Agent Status
   useEffect(() => {
@@ -31,10 +152,25 @@ export default function Dashboard() {
         return [...prev, data];
       });
       
-      if (data.outcome === 'cancelled' || data.outcome === 'completed') {
+      // API key exhausted mid-run
+      if (data.stage === 'api_key_exhausted') {
+        setShowApiKeyModal(true);
+        setAgentStatus('⚠️ API limit reached — waiting for user key...');
+        return;
+      }
+
+      if (data.outcome === 'cancelled' || data.outcome === 'completed' || data.outcome === 'completed_partial') {
         setIsRunning(false);
         setIsStopping(false);
-        setAgentStatus(data.outcome === 'cancelled' ? "Extraction Stopped by User." : "Extraction Completed!");
+        setShowApiKeyModal(false);
+        if (data.outcome === 'cancelled') {
+          setAgentStatus('Extraction Stopped by User.');
+        } else if (data.outcome === 'completed_partial') {
+          setIsPartialExport(true);
+          setAgentStatus('Extraction paused — partial dataset ready for export.');
+        } else {
+          setAgentStatus('Extraction Completed!');
+        }
         return;
       }
 
@@ -242,6 +378,23 @@ export default function Dashboard() {
 
   return (
     <div style={{ padding: '0 2rem', display: 'flex', flexDirection: 'column', height: '100%', minHeight: 'calc(100vh - 80px)' }}>
+      {/* API Key Modal */}
+      {showApiKeyModal && (
+        <ApiKeyModal
+          runId={runId}
+          onKeySubmitted={() => {
+            setShowApiKeyModal(false);
+            setIsRunning(true);
+            setAgentStatus('🔑 Key accepted — resuming extraction...');
+          }}
+          onDismiss={() => {
+            setShowApiKeyModal(false);
+            setIsRunning(false);
+            setIsPartialExport(true);
+            setAgentStatus('Extraction paused — partial dataset ready for export.');
+          }}
+        />
+      )}
       {/* Header & Agent Status Monitor */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', alignItems: 'flex-start' }}>
         <div>
@@ -309,7 +462,7 @@ export default function Dashboard() {
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '1rem' }}>
-            {dataRows.length > 0 && (
+            {dataRows.length > 0 && !isPartialExport && (
               <button onClick={findMoreData} disabled={isRunning} style={{ 
                 background: 'rgba(59, 130, 246, 0.1)', 
                 color: '#3b82f6', 
@@ -323,10 +476,11 @@ export default function Dashboard() {
               </button>
             )}
             <button onClick={exportCSV} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Download size={18} /> Export Dataset (CSV)
+              <Download size={18} /> {isPartialExport ? 'Export Partial Dataset (CSV)' : 'Export Dataset (CSV)'}
             </button>
           </div>
         )}
+
       </div>
 
       {/* Tabs */}

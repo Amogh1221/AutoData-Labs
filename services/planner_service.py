@@ -1,6 +1,6 @@
 import json
-import ollama
 from typing import List
+from core.llm import chat
 from core.schemas import SchemaColumn, Candidate
 from core.interfaces import ISearchProvider
 from core.prompts import PLANNER_SCHEMA_PROMPT
@@ -26,7 +26,7 @@ class PlannerService:
 
         prompt = PLANNER_SCHEMA_PROMPT.format(topic=topic, context=context)
         
-        response = ollama.chat(
+        response = chat(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             format="json"
@@ -81,7 +81,7 @@ class PlannerService:
     def discover_entities(self, topic: str) -> List[Candidate]:
         prompt = f"You are a Research Assistant. The user wants to research '{topic}'. Give a list of 5-10 specific target names (companies, people, or products) that fall under this topic. Respond ONLY with a valid JSON array of strings representing the names."
         
-        response = ollama.chat(
+        response = chat(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             format="json"
@@ -119,7 +119,7 @@ class PlannerService:
             f"- 'reason': string (a short, direct explanation of why it is valid or why it is rejected. If rejected, be specific about why it doesn't make sense for this topic or if it's a duplicate)."
         )
 
-        response = ollama.chat(
+        response = chat(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             format="json"

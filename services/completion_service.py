@@ -1,6 +1,6 @@
 import json
-import ollama
 import uuid
+from core.llm import chat, HFKeyExhaustedException, set_current_run_id
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
@@ -21,6 +21,7 @@ class CompletionService:
 
     def complete_single_entity(self, entity: Entity, run_id: str, topic: str, schema_dict: dict) -> None:
         """Searches for and fills in any missing field values on a single entity."""
+        set_current_run_id(run_id)
         missing_fields = [
             (i, f) for i, f in enumerate(entity.fields)
             if not f.value or str(f.value).strip().upper() == "NULL"
@@ -71,7 +72,7 @@ class CompletionService:
                 )
 
                 try:
-                    response = ollama.chat(model=self.model, messages=[{"role": "user", "content": prompt}], format="json")
+                    response = chat(model=self.model, messages=[{"role": "user", "content": prompt}], format="json")
                     content = response['message']['content'].strip()
                     if content.startswith("```json"): content = content[7:]
                     elif content.startswith("```"): content = content[3:]
@@ -83,6 +84,8 @@ class CompletionService:
                     if extracted_val and str(extracted_val).strip().upper() != "NULL":
                         found_value = extracted_val
                         break
+                except HFKeyExhaustedException:
+                    raise  # Propagate to pipeline
                 except Exception as e:
                     print(f"Error extracting completion for '{field.field_name}': {e}")
 

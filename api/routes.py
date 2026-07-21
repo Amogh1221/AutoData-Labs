@@ -3,8 +3,11 @@ import asyncio
 import json
 import sqlite3
 import uuid
+import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from sse_starlette.sse import EventSourceResponse
+from core import llm as llm_module
+from core.llm import set_current_run_id, set_run_key, clear_run_key, HFKeyExhaustedException
 
 from core.schemas import (
     TopicRequest, SchemaGenerateRequest, SearchContextResponse, SchemaResponse, EntityRequest, 
@@ -26,6 +29,21 @@ router = APIRouter()
 executor = ThreadPoolExecutor(max_workers=10)
 
 run_states = {}
+run_api_keys: dict[str, str] = {}  # run_id → user-supplied HF API key (session-only)
+
+
+def _wait_for_key(run_id: str, timeout_seconds: int = 300) -> str | None:
+    """Block until a user key arrives for run_id, or until timeout / cancellation."""
+    elapsed = 0
+    while elapsed < timeout_seconds:
+        if run_states.get(run_id) == "cancelled":
+            return None
+        key = llm_module.get_run_key(run_id)
+        if key:
+            return key
+        time.sleep(2)
+        elapsed += 2
+    return None
 
 @router.post("/api/schema/search", response_model=SearchContextResponse)
 def search_schema_context(
@@ -66,6 +84,9 @@ async def discover_entities(
 def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, required_fields: list, source_service: SourceService, research_service: ResearchService, completion_service: CompletionService, store: SQLiteStore, executor):
     """Background task that runs the Source Agent, Research Agent, and triggers concurrent Completion Agents."""
     from datetime import datetime
+
+    # Bind run_id to this thread so core.llm can pick up user-supplied keys
+    set_current_run_id(run_id)
     
     # 1. Source Agent
     sources = store.get_pending_sources(topic)
@@ -85,12 +106,11 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
                 sources.append(s)
         store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="source_agent_end", outcome=f"found_{len(sources)}_sources", error_message=None, timestamp=datetime.utcnow()))
     
-    import time
     def check_state_fn():
         state = run_states.get(run_id, "running")
         if state == "cancelled":
             return False
-        while state == "paused":
+        while state in ("paused", "waiting_for_key"):
             time.sleep(1)
             state = run_states.get(run_id, "running")
             if state == "cancelled":
@@ -107,18 +127,36 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
                     seen_keys.add(str(f.value).strip().lower())
 
     completion_futures = []
+    api_exhausted = False  # set True when user dismisses popup without key
     
     # 2. Research Agent
     for source in sources:
-        if not check_state_fn():
+        if not check_state_fn() or api_exhausted:
             break
-            
+
         store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="research_agent_start", outcome=f"processing_{source.url}", error_message=None, timestamp=datetime.utcnow()))
-        entities = research_service.process_source(source, schema_dict, run_id, check_state_fn, required_fields, seen_keys)
-        store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="research_agent_end", outcome=f"completed_{source.url}", error_message=None, timestamp=datetime.utcnow()))
+
+        while True:  # retry loop for API exhaustion
+            try:
+                entities = research_service.process_source(source, schema_dict, run_id, check_state_fn, required_fields, seen_keys)
+                store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="research_agent_end", outcome=f"completed_{source.url}", error_message=None, timestamp=datetime.utcnow()))
+                break
+            except HFKeyExhaustedException:
+                # Signal frontend via SSE
+                store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="api_key_exhausted", outcome="waiting_for_key", error_message=None, timestamp=datetime.utcnow()))
+                run_states[run_id] = "waiting_for_key"
+                print(f"[{run_id}] HF API exhausted — waiting for user key (up to 5 min)...")
+                key = _wait_for_key(run_id, timeout_seconds=300)
+                if key is None:
+                    print(f"[{run_id}] No key provided — finishing with partial data.")
+                    api_exhausted = True
+                    break
+                print(f"[{run_id}] User key received — retrying.")
+                run_states[run_id] = "running"
+                continue
         
         # 3. Fire off concurrent Completion Agent for newly extracted entities
-        if entities:
+        if not api_exhausted and entities:
             for entity in entities:
                 needs_completion = any(not f.value or str(f.value).upper() == "NULL" for f in entity.fields)
                 if needs_completion:
@@ -130,10 +168,14 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
         
     final_state = run_states.get(run_id, "running")
     if final_state == "cancelled":
-        store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="system", outcome="cancelled", error_message=None, timestamp=datetime.utcnow()))
+        outcome = "cancelled"
+    elif api_exhausted:
+        outcome = "completed_partial"
     else:
-        store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="system", outcome="completed", error_message=None, timestamp=datetime.utcnow()))
+        outcome = "completed"
+    store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="system", outcome=outcome, error_message=None, timestamp=datetime.utcnow()))
 
+    clear_run_key(run_id)
     if run_id in run_states:
         del run_states[run_id]
 
@@ -288,12 +330,30 @@ async def stream_logs(run_id: str = None):
 
     return EventSourceResponse(event_generator())
 
+@router.post("/api/set_api_key")
+async def set_api_key(req: dict):
+    """
+    Accepts a user-supplied HF API key for an active run.
+    The key is stored in-memory only (session-scoped) and never written to disk.
+    Once stored, the blocked pipeline thread picks it up within 2 s and retries.
+    """
+    run_id = req.get("run_id")
+    api_key = req.get("api_key", "").strip()
+    if not run_id or not api_key:
+        return {"error": "Missing run_id or api_key"}
+    set_run_key(run_id, api_key)
+    # Resume the pipeline — it was blocked in waiting_for_key state
+    if run_states.get(run_id) == "waiting_for_key":
+        run_states[run_id] = "running"
+    return {"status": "key_accepted"}
+
 @router.post("/api/stop_extraction")
 async def stop_extraction(req: dict):
     run_id = req.get("run_id")
     if run_id:
         run_states[run_id] = "cancelled"
     return {"status": "stopping"}
+
 
 @router.post("/api/pause_extraction")
 async def pause_extraction(req: dict):

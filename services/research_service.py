@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from bs4 import BeautifulSoup
-import ollama
+from core.llm import chat, HFKeyExhaustedException, set_current_run_id
 
 from core.models import Source, SourceStatus, FieldValue, Evidence, Entity, EntityStatus, RunLog
 from core.interfaces import ICheckpointStore, ICrawlProvider
@@ -106,7 +106,8 @@ class ResearchService:
             required_fields_instruction=req_instruction
         )
 
-        response = ollama.chat(
+        set_current_run_id(getattr(self, '_current_run_id', None) or '')
+        response = chat(
             model=self.model_name,
             messages=[
                 {'role': 'system', 'content': 'You are a precise data extraction system. You only output valid JSON arrays without any markdown formatting.'},
@@ -171,6 +172,8 @@ class ResearchService:
         required_fields: list[str] | None = None,
         seen_keys: set | None = None
     ) -> list[Entity] | None:
+        self._current_run_id = run_id
+        set_current_run_id(run_id)
         """Crawls a source, chunks it, extracts entities, and persists them."""
         try:
             # 1. Crawl
@@ -188,6 +191,8 @@ class ResearchService:
                 try:
                     rows = self._call_llm(schema, chunk, required_fields or [])
                     all_extracted_rows.extend(rows)
+                except HFKeyExhaustedException:
+                    raise  # Let the pipeline handle this
                 except Exception as e:
                     print(f"Extraction failed on a chunk for {source.url}: {e}")
 
@@ -244,6 +249,8 @@ class ResearchService:
 
             return entities
 
+        except HFKeyExhaustedException:
+            raise  # Propagate quota errors to the pipeline
         except Exception as e:
             print(f"ResearchService error for {source.url}: {e}")
             source.status = SourceStatus.REJECTED

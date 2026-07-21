@@ -4,8 +4,8 @@ from typing import List
 from bs4 import BeautifulSoup
 
 import json
-import ollama
 from core.models import Source, SourceStatus, SourceType
+from core.llm import chat, HFKeyExhaustedException
 from core.schemas import Candidate
 from core.interfaces import ISearchProvider
 from core.prompts import SOURCE_AGENT_QUERY_PROMPT, SOURCE_AGENT_FILTER_PROMPT
@@ -62,7 +62,7 @@ class SourceService:
 
         # 1. Generate Queries
         prompt = SOURCE_AGENT_QUERY_PROMPT.format(topic=topic)
-        response = ollama.chat(model=self.model, messages=[{"role": "user", "content": prompt}], format="json")
+        response = chat(model=self.model, messages=[{"role": "user", "content": prompt}], format="json")
         try:
             content = response['message']['content'].strip()
             # Remove markdown JSON wrappers if present
@@ -89,6 +89,8 @@ class SourceService:
                 raise ValueError("No valid queries found")
         except Exception as e:
             print(f"Error generating queries: {e}")
+            if isinstance(e, HFKeyExhaustedException):
+                raise
             queries = [f"{topic} list", f"{topic} database"]
             
         print(f"DEBUG QUERIES: {queries}")
@@ -119,7 +121,7 @@ class SourceService:
             results_json=json.dumps([{"url": r["url"], "title": r["title"], "snippet": r.get("snippet", "")} for r in all_results], indent=2)
         )
         try:
-            filter_response = ollama.chat(model=self.model, messages=[{"role": "user", "content": filter_prompt}], format="json")
+            filter_response = chat(model=self.model, messages=[{"role": "user", "content": filter_prompt}], format="json")
             content = filter_response['message']['content'].strip()
             if content.startswith("```json"): content = content[7:]
             elif content.startswith("```"): content = content[3:]
@@ -135,6 +137,8 @@ class SourceService:
                     approved_flags = [True] * len(all_results)
         except Exception as e:
             print(f"Error filtering results: {e}")
+            if isinstance(e, HFKeyExhaustedException):
+                raise
             approved_flags = [True] * len(all_results)
             
         print(f"DEBUG APPROVED FLAGS: {approved_flags}")
