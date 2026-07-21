@@ -48,7 +48,7 @@ export default function Home() {
     <div className="animate-fade-in-up" style={{ maxWidth: '600px', margin: '4rem auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
       <h2 style={{ fontSize: '2rem', marginBottom: '1rem' }}>What do you want to research?</h2>
       <p className="text-secondary" style={{ marginBottom: '2rem' }}>
-        Enter a topic. The planner agent will automatically build an extraction schema and discover targets.
+        Enter a topic. Autonomous agents will build a schema, discover sources, and extract a structured dataset — ready to export.
       </p>
 
       <form onSubmit={handleGenerate} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'stretch' }}>
