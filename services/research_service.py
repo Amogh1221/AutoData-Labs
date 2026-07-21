@@ -174,74 +174,69 @@ class ResearchService:
     ) -> list[Entity] | None:
         self._current_run_id = run_id
         set_current_run_id(run_id)
-        """Crawls a source, chunks it, extracts entities, and persists them."""
+        """Crawls a source, chunks it, extracts and immediately persists each row."""
+        primary_key = required_fields[0] if required_fields else None
+        if seen_keys is None:
+            seen_keys = set()
+
         try:
-            # 1. Crawl
+            # 1. Crawl (can be slow — Playwright/BeautifulSoup)
             html = self.crawl.fetch(source.url)
+
+            # ✅ FIX: Check cancellation immediately after the long crawl
+            if check_state_fn and not check_state_fn():
+                return None
 
             # 2. Chunk
             chunks = self._chunk_html(html)
 
-            all_extracted_rows: list[dict] = []
+            entities: list[Entity] = []
 
-            # 3. Extract per chunk
+            # 3. Extract per chunk — save each valid row immediately (streaming)
             for chunk in chunks:
                 if check_state_fn and not check_state_fn():
                     break
                 try:
                     rows = self._call_llm(schema, chunk, required_fields or [])
-                    all_extracted_rows.extend(rows)
                 except HFKeyExhaustedException:
                     raise  # Let the pipeline handle this
                 except Exception as e:
                     print(f"Extraction failed on a chunk for {source.url}: {e}")
+                    continue
 
-            if not all_extracted_rows:
-                source.status = SourceStatus.REJECTED
-                source.metadata_draft += " (Rejected: No relevant data found by LLM)"
-                if hasattr(self.store, 'save_source'):
-                    self.store.save_source(source)
-                return None
+                for row in rows:
+                    # 4. Deduplicate — drop rows missing the primary key or already seen
+                    if primary_key:
+                        pk_val = row.get(primary_key)
+                        if not pk_val or str(pk_val).strip().upper() == "NULL" or str(pk_val).strip() == "":
+                            continue  # Must have a primary key value
 
-            # 4. Deduplicate on primary key (only drop if primary key is missing/empty)
-            primary_key = required_fields[0] if required_fields else None
-            valid_rows: list[dict] = []
-            for row in all_extracted_rows:
-                if primary_key:
-                    pk_val = row.get(primary_key)
-                    if not pk_val or str(pk_val).strip().upper() == "NULL" or str(pk_val).strip() == "":
-                        continue  # Must have a primary key
-
-                    pk_lower = str(pk_val).strip().lower()
-                    if seen_keys is not None:
+                        pk_lower = str(pk_val).strip().lower()
                         if pk_lower in seen_keys:
                             continue
                         seen_keys.add(pk_lower)
-                valid_rows.append(row)
 
-            if not valid_rows:
+                    # 5. Build entity and persist IMMEDIATELY — frontend sees it on next poll
+                    entity = self._build_entity(row, source, run_id, primary_key or "")
+                    self.store.save_checkpoint(entity.entity_id, entity)
+                    if hasattr(self.store, 'log_run'):
+                        self.store.log_run(RunLog(
+                            log_id=str(uuid.uuid4()),
+                            run_id=run_id,
+                            entity_id=entity.entity_id,
+                            stage="resolved",
+                            outcome="success",
+                            error_message=None,
+                            timestamp=self._now()
+                        ))
+                    entities.append(entity)
+
+            if not entities:
                 source.status = SourceStatus.REJECTED
-                source.metadata_draft += " (Rejected: All extracted rows lacked a primary key)"
+                source.metadata_draft += " (Rejected: No valid rows extracted)"
                 if hasattr(self.store, 'save_source'):
                     self.store.save_source(source)
                 return None
-
-            # 5. Build and persist entities
-            entities: list[Entity] = []
-            for row in valid_rows:
-                entity = self._build_entity(row, source, run_id, primary_key or "")
-                self.store.save_checkpoint(entity.entity_id, entity)
-                if hasattr(self.store, 'log_run'):
-                    self.store.log_run(RunLog(
-                        log_id=str(uuid.uuid4()),
-                        run_id=run_id,
-                        entity_id=entity.entity_id,
-                        stage="resolved",
-                        outcome="success",
-                        error_message=None,
-                        timestamp=self._now()
-                    ))
-                entities.append(entity)
 
             source.status = SourceStatus.COMPLETED
             if hasattr(self.store, 'save_source'):

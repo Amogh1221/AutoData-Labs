@@ -137,6 +137,10 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
         store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="research_agent_start", outcome=f"processing_{source.url}", error_message=None, timestamp=datetime.utcnow()))
 
         while True:  # retry loop for API exhaustion
+            # ✅ FIX: Check cancellation at the top of every retry iteration
+            if not check_state_fn():
+                api_exhausted = True
+                break
             try:
                 entities = research_service.process_source(source, schema_dict, run_id, check_state_fn, required_fields, seen_keys)
                 store.log_run(RunLog(log_id=str(uuid.uuid4()), run_id=run_id, entity_id="system", stage="research_agent_end", outcome=f"completed_{source.url}", error_message=None, timestamp=datetime.utcnow()))
@@ -163,8 +167,19 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
                     fut = executor.submit(completion_service.complete_single_entity, entity, run_id, topic, schema_dict)
                     completion_futures.append(fut)
         
+    # ✅ FIX: Wait for completion futures with cancellation support.
+    # Poll every 1 s so Stop propagates within ~1 second instead of blocking forever.
     if completion_futures:
-        wait(completion_futures)
+        remaining = list(completion_futures)
+        while remaining:
+            done_set, remaining_set = wait(remaining, timeout=1)
+            remaining = list(remaining_set)
+            if not check_state_fn():
+                # Cancel anything still queued (won't kill in-progress calls,
+                # but prevents new ones from starting and unblocks the pipeline).
+                for f in remaining:
+                    f.cancel()
+                break
         
     final_state = run_states.get(run_id, "running")
     if final_state == "cancelled":
