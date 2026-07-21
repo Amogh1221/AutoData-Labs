@@ -87,8 +87,11 @@ def chat(model: str, messages: list, format: str = None) -> dict:
         )
 
     hf_model = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
-    # HF migrated from api-inference.huggingface.co → router.huggingface.co in 2025
-    url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
+    # HF uses a router with multiple inference providers.
+    # 'hf-inference' (HF's own) does NOT support gated Meta models like Llama 3.1.
+    # Use 'novita' or 'nebius' for Llama. Set HF_PROVIDER in .env to override.
+    hf_provider = os.getenv("HF_PROVIDER", "novita")
+    url = f"https://router.huggingface.co/{hf_provider}/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -122,6 +125,14 @@ def chat(model: str, messages: list, format: str = None) -> dict:
         raise PermissionError(
             f"Hugging Face API key is invalid or expired (HTTP 401). "
             f"Update HF_API_KEY in your .env file."
+        )
+
+    if response.status_code == 400:
+        error_body = response.text[:300]
+        raise Exception(
+            f"Hugging Face API error (HTTP 400) — model '{hf_model}' is not supported "
+            f"by provider '{hf_provider}'. Try changing HF_PROVIDER in your .env file. "
+            f"For Llama models use 'novita' or 'nebius'. Detail: {error_body}"
         )
 
     if response.status_code != 200:
