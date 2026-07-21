@@ -36,10 +36,6 @@ class Candidate(BaseModel):
 class DiscoveryResponse(BaseModel):
     candidates: List[Candidate]
 
-class RunRequest(BaseModel):
-    topic: str
-    entities: List[str]
-    schema_def: List[Dict[str, Any]]
 
 class ValidateColumnRequest(BaseModel):
     topic: str

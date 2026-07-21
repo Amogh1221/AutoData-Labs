@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, Depends
 import asyncio
 import json
 import sqlite3
@@ -10,8 +10,8 @@ from core import llm as llm_module
 from core.llm import set_current_run_id, set_run_key, clear_run_key, HFKeyExhaustedException
 
 from core.schemas import (
-    TopicRequest, SchemaGenerateRequest, SearchContextResponse, SchemaResponse, EntityRequest, 
-    DiscoveryResponse, RunRequest, ValidateColumnRequest, ValidateColumnResponse
+    TopicRequest, SchemaGenerateRequest, SearchContextResponse, SchemaResponse, EntityRequest,
+    DiscoveryResponse, ValidateColumnRequest, ValidateColumnResponse
 )
 from api.dependencies import (
     get_store, get_planner_service, get_source_service, get_research_service, get_completion_service
@@ -21,7 +21,6 @@ from services.planner_service import PlannerService
 from services.source_service import SourceService
 from services.research_service import ResearchService
 from services.completion_service import CompletionService
-from services.orchestrator import Orchestrator
 from core.models import RunLog, Source, Dataset, SourceStatus, SourceType
 
 router = APIRouter()
