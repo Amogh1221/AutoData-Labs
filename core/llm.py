@@ -80,8 +80,11 @@ def chat(model: str, messages: list, format: str = None) -> dict:
     run_id = getattr(_thread_local, "run_id", None)
     api_key = (get_run_key(run_id) if run_id else None) or os.getenv("HF_API_KEY")
 
-    if not api_key:
-        raise ValueError("HF_API_KEY must be set when CLOUD_MODE=true")
+    if not api_key or api_key == "your_huggingface_api_key_here":
+        raise ValueError(
+            "HF_API_KEY is not configured. "
+            "Set it in your .env file or set CLOUD_MODE=false to use local Ollama."
+        )
 
     hf_model = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
     url = f"https://api-inference.huggingface.co/models/{hf_model}/v1/chat/completions"
@@ -95,11 +98,29 @@ def chat(model: str, messages: list, format: str = None) -> dict:
         "max_tokens": 4000,
     }
 
-    response = requests.post(url, headers=headers, json=payload, timeout=60)
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+    except requests.exceptions.ConnectionError as e:
+        raise ConnectionError(
+            f"Cannot reach Hugging Face API ({hf_model}). "
+            f"Check your internet connection or set CLOUD_MODE=false to use local Ollama. "
+            f"Detail: {e}"
+        ) from e
+    except requests.exceptions.Timeout:
+        raise TimeoutError(
+            f"Hugging Face API timed out after 60 s. "
+            f"The model may be loading — try again in a moment, or set CLOUD_MODE=false."
+        )
 
     if response.status_code == 429:
         raise HFKeyExhaustedException(
             f"Hugging Face API quota exhausted (HTTP 429): {response.text[:200]}"
+        )
+
+    if response.status_code == 401:
+        raise PermissionError(
+            f"Hugging Face API key is invalid or expired (HTTP 401). "
+            f"Update HF_API_KEY in your .env file."
         )
 
     if response.status_code != 200:
@@ -113,3 +134,4 @@ def chat(model: str, messages: list, format: str = None) -> dict:
             "content": data["choices"][0]["message"]["content"]
         }
     }
+
