@@ -87,7 +87,8 @@ def chat(model: str, messages: list, format: str = None) -> dict:
         )
 
     hf_model = os.getenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
-    url = f"https://api-inference.huggingface.co/models/{hf_model}/v1/chat/completions"
+    # HF migrated from api-inference.huggingface.co → router.huggingface.co in 2025
+    url = "https://router.huggingface.co/hf-inference/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
