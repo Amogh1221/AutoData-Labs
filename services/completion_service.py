@@ -10,7 +10,7 @@ from persistence.sqlite_store import SQLiteStore
 from core.prompts import COMPLETION_AGENT_PROMPT
 
 class CompletionService:
-    def __init__(self, store: SQLiteStore, search_provider: ISearchProvider, crawl_provider: ICrawlProvider, model_name: str = "llama3.2:3b"):
+    def __init__(self, store: SQLiteStore, search_provider: ISearchProvider, crawl_provider: ICrawlProvider, model_name: str = "qwen2.5:7b-instruct"):
         self.store = store
         self.search = search_provider
         self.crawl = crawl_provider

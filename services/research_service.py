@@ -40,7 +40,7 @@ def _extract_json_array(text: str) -> list | None:
 
 
 class ResearchService:
-    def __init__(self, store: ICheckpointStore, crawl: ICrawlProvider, model_name: str = "llama3"):
+    def __init__(self, store: ICheckpointStore, crawl: ICrawlProvider, model_name: str = "qwen2.5:7b-instruct"):
         self.store = store
         self.crawl = crawl
         self.model_name = model_name

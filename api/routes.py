@@ -11,7 +11,8 @@ from core.llm import set_current_run_id, set_run_key, clear_run_key, HFKeyExhaus
 
 from core.schemas import (
     TopicRequest, SchemaGenerateRequest, SearchContextResponse, SchemaResponse, EntityRequest,
-    DiscoveryResponse, ValidateColumnRequest, ValidateColumnResponse
+    DiscoveryResponse, ValidateColumnRequest, ValidateColumnResponse,
+    StartExtractionRequest, StartCompletionRequest, FindMoreSourcesRequest, SetApiKeyRequest, RunActionRequest
 )
 from api.dependencies import (
     get_store, get_planner_service, get_source_service, get_research_service, get_completion_service
@@ -196,16 +197,15 @@ def _live_extraction_pipeline(topic: str, run_id: str, schema_dict: dict, requir
 
 @router.post("/api/start_extraction")
 async def start_extraction(
-    req: dict,
-    background_tasks: BackgroundTasks,
+    req: StartExtractionRequest,
     source_service: SourceService = Depends(get_source_service),
     research_service: ResearchService = Depends(get_research_service),
     completion_service: CompletionService = Depends(get_completion_service),
     store = Depends(get_store)
 ):
     """Starts the live extraction pipeline bypassing Discovery."""
-    topic = req.get("topic")
-    columns = req.get("columns", [])
+    topic = req.topic
+    columns = req.columns
 
     schema_dict = {
         col["name"]: {
@@ -232,13 +232,13 @@ async def start_extraction(
 
 @router.post("/api/start_completion")
 async def start_completion(
-    req: dict,
+    req: StartCompletionRequest,
     store: SQLiteStore = Depends(get_store),
     completion_service: CompletionService = Depends(get_completion_service)
 ):
-    run_id = req.get("run_id")
-    topic = req.get("topic")
-    columns = req.get("columns") or []  # Guard: null or missing → empty list
+    run_id = req.run_id
+    topic = req.topic
+    columns = req.columns or []  # Guard: null or missing → empty list
 
     schema_dict = {
         col["name"]: {
@@ -262,16 +262,16 @@ async def start_completion(
 
 @router.post("/api/find_more_sources")
 async def find_more_sources(
-    req: dict,
+    req: FindMoreSourcesRequest,
     source_service: SourceService = Depends(get_source_service),
     research_service: ResearchService = Depends(get_research_service),
     completion_service: CompletionService = Depends(get_completion_service),
     store: SQLiteStore = Depends(get_store)
 ):
     """Finds a new batch of sources and restarts the pipeline."""
-    run_id = req.get("run_id")
-    topic = req.get("topic")
-    columns = req.get("columns", [])
+    run_id = req.run_id
+    topic = req.topic
+    columns = req.columns or []
     
     if not run_id or not topic:
         return {"error": "Missing run_id or topic"}
@@ -345,14 +345,14 @@ async def stream_logs(run_id: str = None):
     return EventSourceResponse(event_generator())
 
 @router.post("/api/set_api_key")
-async def set_api_key(req: dict):
+async def set_api_key(req: SetApiKeyRequest):
     """
     Accepts a user-supplied HF API key for an active run.
     The key is stored in-memory only (session-scoped) and never written to disk.
     Once stored, the blocked pipeline thread picks it up within 2 s and retries.
     """
-    run_id = req.get("run_id")
-    api_key = req.get("api_key", "").strip()
+    run_id = req.run_id
+    api_key = req.api_key.strip()
     if not run_id or not api_key:
         return {"error": "Missing run_id or api_key"}
     set_run_key(run_id, api_key)
@@ -362,23 +362,23 @@ async def set_api_key(req: dict):
     return {"status": "key_accepted"}
 
 @router.post("/api/stop_extraction")
-async def stop_extraction(req: dict):
-    run_id = req.get("run_id")
+async def stop_extraction(req: RunActionRequest):
+    run_id = req.run_id
     if run_id:
         run_states[run_id] = "cancelled"
     return {"status": "stopping"}
 
 
 @router.post("/api/pause_extraction")
-async def pause_extraction(req: dict):
-    run_id = req.get("run_id")
+async def pause_extraction(req: RunActionRequest):
+    run_id = req.run_id
     if run_id and run_states.get(run_id) != "cancelled":
         run_states[run_id] = "paused"
     return {"status": "paused"}
 
 @router.post("/api/resume_extraction")
-async def resume_extraction(req: dict):
-    run_id = req.get("run_id")
+async def resume_extraction(req: RunActionRequest):
+    run_id = req.run_id
     if run_id and run_states.get(run_id) != "cancelled":
         run_states[run_id] = "running"
     return {"status": "running"}

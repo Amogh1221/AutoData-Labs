@@ -45,3 +45,25 @@ class ValidateColumnRequest(BaseModel):
 class ValidateColumnResponse(BaseModel):
     valid: bool
     reason: str
+
+class StartExtractionRequest(BaseModel):
+    topic: str
+    columns: List[Dict[str, Any]] = []
+
+class StartCompletionRequest(BaseModel):
+    run_id: str
+    topic: str
+    columns: List[Dict[str, Any]] = []
+
+class FindMoreSourcesRequest(BaseModel):
+    run_id: str
+    topic: str
+    columns: List[Dict[str, Any]] = []
+
+class SetApiKeyRequest(BaseModel):
+    run_id: str
+    api_key: str
+
+class RunActionRequest(BaseModel):
+    run_id: str
+

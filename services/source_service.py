@@ -11,7 +11,7 @@ from core.interfaces import ISearchProvider
 from core.prompts import SOURCE_AGENT_QUERY_PROMPT, SOURCE_AGENT_FILTER_PROMPT
 
 class SourceService:
-    def __init__(self, search_provider: ISearchProvider, model_name: str = "llama3.2:3b"):
+    def __init__(self, search_provider: ISearchProvider, model_name: str = "qwen2.5:7b-instruct"):
         self.search_provider = search_provider
         self.model = model_name
 

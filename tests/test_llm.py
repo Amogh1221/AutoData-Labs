@@ -79,6 +79,7 @@ class TestHFMode:
         import core.llm as llm
 
         monkeypatch.setenv("CLOUD_MODE", "true")
+        monkeypatch.setenv("CLOUD_PROVIDER", "hf")
         monkeypatch.setenv("HF_API_KEY", "hf_testkey")
         monkeypatch.setenv("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 
@@ -95,6 +96,7 @@ class TestHFMode:
         import core.llm as llm
 
         monkeypatch.setenv("CLOUD_MODE", "true")
+        monkeypatch.setenv("CLOUD_PROVIDER", "hf")
         monkeypatch.setenv("HF_API_KEY", "hf_testkey")
 
         mock_resp = self._make_response(429, {"error": "rate limited"})
@@ -108,6 +110,7 @@ class TestHFMode:
         import core.llm as llm
 
         monkeypatch.setenv("CLOUD_MODE", "true")
+        monkeypatch.setenv("CLOUD_PROVIDER", "hf")
         monkeypatch.setenv("HF_API_KEY", "hf_testkey")
 
         mock_resp = self._make_response(503, {"error": "service unavailable"})
@@ -124,6 +127,7 @@ class TestHFMode:
         import core.llm as llm
 
         monkeypatch.setenv("CLOUD_MODE", "true")
+        monkeypatch.setenv("CLOUD_PROVIDER", "hf")
         monkeypatch.delenv("HF_API_KEY", raising=False)
         # Ensure no run key is set
         llm._run_keys.clear()
